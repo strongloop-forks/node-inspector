@@ -9,8 +9,16 @@ WebInspector.loaded = function() {
   });
   WebInspector.socket.on('error', function(error) { console.error(error); });
   WebInspector.socket.on('connect', function() {
-      InspectorFrontendHost.sendMessageToBackend = WebInspector.socket.send.bind(WebInspector.socket);
-      WebInspector.doLoadedDone();
+      var match = window.location.search.match(/\?port=(\d+)/);
+      if (!match) {
+        console.log('cannot extract port from query ' + window.location.search);
+        return;
+      }
+
+      WebInspector.socket.emit('setport', match[1], function() {
+        InspectorFrontendHost.sendMessageToBackend = WebInspector.socket.send.bind(WebInspector.socket);
+        WebInspector.doLoadedDone();
+      });
   });
   return;
 };
