@@ -123,9 +123,12 @@
     }
     function selectFrame(id) {
         forEachInspectorFrame(function (it) {
-            it.style.visibility = getId(it) == id
-                    ? 'visible'
-                    : 'hidden';
+            if (getId(it) == id) {
+                it.style.visibility = 'visible';
+                it.contentWindow.focus();
+            } else {
+                it.style.visibility = 'hidden';
+            }
         });
 
         forEachProcessItem(function (it) {
