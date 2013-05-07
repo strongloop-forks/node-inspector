@@ -5,74 +5,10 @@
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
 
-    <style type="text/css">
-        html {
-            height: 100%;
-        }
-
-        body {
-            cursor: default;
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            overflow: hidden;
-            font-family: Lucida Grande, sans-serif;
-            font-size: 10px;
-            margin: 0;
-            -webkit-text-size-adjust: none;
-            -webkit-user-select: none;
-        }
-
-        * {
-            -webkit-box-sizing: border-box;
-        }
-
-        #process-list {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 200px;
-            font-size: 1.2em;
-            margin: 0;
-            padding: 0;
-        }
-
-        .process-item {
-            padding: 0.5em 0.5em;
-            margin: 0.5em 0.5em;
-            list-style: none;
-            border: 1px solid darkgray;
-        }
-
-        .process-item.selected {
-            background-color: lightblue;
-        }
-
-        #process-list div {
-            width: 100%;
-        }
-
-        #inspector {
-            position: absolute;
-            left: 200px;
-            right: 0;
-            top: 0;
-            bottom: 0;
-        }
-
-        #inspector iframe {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+    <link href="/node/cluster.css" rel="stylesheet" type="text/css"/>
 </head>
 <body>
+
 <ul id="process-list">
     <li class="process-item selected" data-id="0">
         <div class="title">master (pid 2814)</div>
@@ -102,53 +38,5 @@
     </iframe>
 </div>
 
-<script type="text/javascript">
-
-    function forEachProcessItem(cb) {
-        var list = document.getElementById('process-list');
-        var items = list.getElementsByTagName('li');
-        Array.prototype.forEach.call(items, cb);
-    }
-
-    function forEachInspectorFrame(cb) {
-        var iframes = document
-                .getElementById('inspector')
-                .getElementsByTagName('iframe');
-
-        Array.prototype.forEach.call(iframes, cb);
-    }
-
-    function getId(itemOrFrame) {
-        return itemOrFrame.getAttribute('data-id');
-    }
-    function selectFrame(id) {
-        forEachInspectorFrame(function (it) {
-            if (getId(it) == id) {
-                it.style.visibility = 'visible';
-                it.contentWindow.focus();
-            } else {
-                it.style.visibility = 'hidden';
-            }
-        });
-
-        forEachProcessItem(function (it) {
-            if (getId(it) == id)
-                it.classList.add('selected');
-            else
-                it.classList.remove('selected');
-        });
-    }
-
-    function onDocumentLoaded() {
-        forEachProcessItem(function (it) {
-            it.addEventListener('click', function () {
-                selectFrame(getId(this));
-            });
-        });
-
-        window.removeEventListener("DOMContentLoaded", onDocumentLoaded, false);
-    }
-
-    window.addEventListener('DOMContentLoaded', onDocumentLoaded);
-</script>
+<script type="text/javascript" src="/node/cluster.js"></script>
 <body>
