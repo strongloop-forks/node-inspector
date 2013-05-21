@@ -1,4 +1,3 @@
-
 // Wire up websocket to talk to backend
 WebInspector.loaded = function() {
   WebInspector.socket = io.connect("http://" + window.location.host + '/');
@@ -54,3 +53,18 @@ WebInspector._platformFlavor = WebInspector.PlatformFlavor.MacLeopard;
 WebInspector.WorkerManager._calculateWorkerInspectorTitle = function() {
   InspectorFrontendHost.inspectedURLChanged('');
 }
+
+var orig_createResourceFromFramePayload =
+  WebInspector.ResourceTreeModel.prototype._createResourceFromFramePayload;
+
+WebInspector.ResourceTreeModel.prototype._createResourceFromFramePayload =
+  function(frame, url, type, mimeType) {
+    var isToplevelNodeScript = type == WebInspector.resourceTypes.Document &&
+      frame == 'nodeinspector-toplevel-frame';
+
+    if (isToplevelNodeScript) {
+      type = WebInspector.resourceTypes.Script;
+    }
+
+    return orig_createResourceFromFramePayload(frame, url, type, mimeType);
+  }
