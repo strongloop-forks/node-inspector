@@ -51,4 +51,73 @@ describe('RuntimeAgent', function() {
       })
     });
   });
+
+  it('calls function on an object to get completions', function(done) {
+    launcher.runOnBreakInFunction(function(debuggerClient) {
+      var sessionStub = { sendDebugRequest: debuggerClient.sendDebugRequest.bind(debuggerClient) },
+        agent = new RuntimeAgent(sessionStub);
+
+      fetchConsoleObjectId(function(consoleObjectId) {
+        agent.callFunctionOn(
+          {
+            objectId: consoleObjectId,
+            functionDeclaration: getCompletions.toString(),
+            returnByValue: true
+          },
+          function (err, response) {
+            if (err) {
+              done(err);
+              return;
+            }
+
+            var completions = response.result.value;
+            expect(completions).to.contain.keys('log', 'error');
+            done();
+          }
+        );
+      });
+
+      function fetchConsoleObjectId(cb) {
+        agent.evaluate(
+          {
+            expression: 'console'
+          },
+          function (err, response) {
+            if (err) {
+              done(err);
+              return;
+            }
+
+            cb(response.result.objectId);
+          }
+        );
+      }
+    });
+  })
 });
+
+
+// copied from front-end/RuntimeModel.js
+function getCompletions(primitiveType)
+{
+  var object;
+  if (primitiveType === "string")
+    object = new String("");
+  else if (primitiveType === "number")
+    object = new Number(0);
+  else if (primitiveType === "boolean")
+    object = new Boolean(false);
+  else
+    object = this;
+
+  var resultSet = {};
+  for (var o = object; o; o = o.__proto__) {
+    try {
+      var names = Object.getOwnPropertyNames(o);
+      for (var i = 0; i < names.length; ++i)
+        resultSet[names[i]] = true;
+    } catch (e) {
+    }
+  }
+  return resultSet;
+}
