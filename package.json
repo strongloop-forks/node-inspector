@@ -23,13 +23,14 @@
   },
   "dependencies": {
     "socket.io": "~0.9.14",
-    "paperboy": "~0.0.5",
+    "express": "~3.2.6",
     "async": "~0.2.8"
   },
   "devDependencies": {
     "mocha": "latest",
     "chai": "latest"
   },
+  "preferGlobal": true,
   "scripts": {
     "test": "mocha"
   }
