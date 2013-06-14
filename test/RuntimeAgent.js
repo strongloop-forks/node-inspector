@@ -4,7 +4,7 @@ var expect = require('chai').expect,
   RuntimeAgent = require('../lib/RuntimeAgent.js').RuntimeAgent;
 
 describe('RuntimeAgent', function() {
-  launcher.stopAllDebuggersAfterEachTest();
+  after(launcher.stopAllDebuggers);
 
   it('gets scope properties', function(done) {
     // Hard-coded value for local scope of MyObj.myFunc().
@@ -34,6 +34,8 @@ describe('RuntimeAgent', function() {
               .to.equal(2);
             expect(result.result[0], 'local var 1').to.deep.equal({
               name: 'msg',
+              writable: true,
+              enumerable: true,
               value: {
                 type: 'string',
                 value: 'hello',
@@ -42,6 +44,8 @@ describe('RuntimeAgent', function() {
             });
             expect(result.result[1], 'local var 2').to.deep.equal({
               name: 'meta',
+              writable: true,
+              enumerable: true,
               value: {
                 type: 'object',
                 objectId: '7',
@@ -56,11 +60,42 @@ describe('RuntimeAgent', function() {
     });
   });
 
+  it('returns object properties with metadata', function(done) {
+    launcher.runInspectObject(function(debuggerClient, inspectedObjectId) {
+      var agent = new RuntimeAgent(debuggerClient);
+      agent.getProperties(
+        {
+          objectId: inspectedObjectId
+        },
+        function(error, result) {
+          if (error)
+            done(error);
+
+          var props = convertPropertyArrayToLookup(result.result);
+
+          expect(props['writableProp'].writable, 'writableProp.writable')
+            .to.be.true;
+
+          expect(props['writableProp'].enumerable, 'writableProp.enumerable')
+            .to.be.true;
+
+          expect(props['readonlyProp'].writable, 'readonlyProp.writable')
+            .to.be.false;
+
+          expect(props['readonlyProp'].enumerable, 'readonlyProp.enumerable')
+            .to.be.false;
+
+          done();
+        }
+      );
+    });
+  });
+
   it('calls function on an object to get completions', function(done) {
     launcher.runOnBreakInFunction(function(debuggerClient) {
       var agent = new RuntimeAgent(debuggerClient);
 
-      fetchConsoleObjectId(function(consoleObjectId) {
+      debuggerClient.fetchObjectId(agent, 'console', function(consoleObjectId) {
         agent.callFunctionOn(
           {
             objectId: consoleObjectId,
@@ -79,25 +114,159 @@ describe('RuntimeAgent', function() {
           }
         );
       });
-
-      function fetchConsoleObjectId(cb) {
-        agent.evaluate(
-          {
-            expression: 'console'
-          },
-          function(err, response) {
-            if (err) {
-              done(err);
-              return;
-            }
-
-            cb(response.result.objectId);
-          }
-        );
-      }
     });
   });
+
+  describe('calls function on an object to change property value', function() {
+    before(setupDebugScenario);
+
+    toValueType(
+      'a string',
+      { type: 'string', value: 'new-value', description: 'new-value' }
+    );
+
+    toValueType(
+      'a number',
+      { type: 'number', value: 10, description: '10' }
+    );
+
+    toValueType(
+      'null',
+      { type: 'null', value: null, description: 'null' }
+    );
+
+    toValueType(
+      'undefined',
+      { type: 'undefined', description: 'undefined' }
+    );
+
+    toRefType(
+      'an object',
+      'inspectedObject',
+      function(valueId) {
+        return {
+          type: 'object',
+          objectId: valueId,
+          className: 'Object',
+          description: 'InspectedClass'
+        };
+      }
+    );
+
+    toRefType(
+      'a function',
+      'localFunc',
+      function(valueId) {
+        return {
+          type: 'function',
+          objectId: valueId,
+          className: 'Function',
+          description: 'function localFunc() { return \'local\'; }'
+        };
+      }
+    );
+
+    // helpers (implementation details) below this line
+
+    var debuggerClient, inspectedObjectId, agent;
+
+    function setupDebugScenario(done) {
+      launcher.runInspectObject(function(client, objectId) {
+        debuggerClient = client;
+        inspectedObjectId = objectId;
+        agent = new RuntimeAgent(debuggerClient);
+        done();
+      });
+    }
+
+    function to(type, test) {
+      it('to ' + type, test);
+    }
+
+    function toValueType(type, value) {
+      to(type, function(done) {
+        verifyPropertySetter(
+          agent,
+          inspectedObjectId,
+          value,
+          value,
+          done
+        );
+      });
+    }
+
+    function toRefType(type, expression, valueCb) {
+      to(type, function(done) {
+        debuggerClient.fetchObjectId(agent, expression, function(valueId) {
+          verifyPropertySetter(
+            agent,
+            inspectedObjectId,
+            valueCb(valueId),
+            valueCb(valueId),
+            done
+          );
+        });
+      });
+    }
+
+    function verifyPropertySetter(agent,
+                                  objectId,
+                                  argumentDef,
+                                  expectedValue,
+                                  done) {
+      agent.callFunctionOn(
+        {
+          objectId: objectId,
+          functionDeclaration: setPropertyValue.toString(),
+          arguments: [
+            { value: 'prop' },
+            argumentDef
+          ]
+        },
+        function(err, result) {
+          if (err) throw err;
+
+          verifyPropertyValue(
+            agent,
+            objectId,
+            'prop',
+            expectedValue,
+            done);
+        }
+      );
+    }
+  });
 });
+
+function convertPropertyArrayToLookup(array) {
+  var lookup = {};
+  for (var i in array) {
+    var prop = array[i];
+    lookup[prop.name] = prop;
+  }
+  return lookup;
+}
+
+function verifyPropertyValue(runtimeAgent,
+                             objectId,
+                             name,
+                             expectedValue,
+                             callback) {
+  runtimeAgent.getProperties(
+    {
+      objectId: objectId
+    },
+    function(err, result) {
+      if (err) throw err;
+
+      var props = convertPropertyArrayToLookup(result.result);
+      var value = props[name] ? props[name].value : undefined;
+      expect(JSON.stringify(value), name)
+        .to.equal(JSON.stringify(expectedValue));
+      callback();
+    }
+  );
+}
 
 
 // copied from front-end/RuntimeModel.js and replaced " with '
@@ -122,4 +291,9 @@ function getCompletions(primitiveType) {
     }
   }
   return resultSet;
+}
+
+// copied from front-end/RemoteObject.js
+function setPropertyValue(name, value) {
+  this[name] = value;
 }

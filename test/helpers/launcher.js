@@ -24,6 +24,7 @@ function startDebugger(scriptPath, done) {
     debuggerClient = new DebuggerClient(debugPort);
     debuggerClient.connect();
     debuggerClient.on('connect', function() {
+      injectTestHelpers(debuggerClient);
       done(child, debuggerClient);
     });
     debuggerClient.on('error', function(e) {
@@ -36,10 +37,29 @@ function startDebugger(scriptPath, done) {
 }
 
 function runOnBreakInFunction(test) {
+  stopAllDebuggers();
   startDebugger('BreakInFunction.js', function(childProcess, debuggerClient) {
     debuggerClient.on('break', function() {
       test(debuggerClient);
     });
+    childProcess.stdin.write('go!\n');
+  });
+}
+
+/** @param {function(DebuggerClient, string)} test */
+function runInspectObject(test) {
+  stopAllDebuggers();
+  startDebugger('InspectObject.js', function(childProcess, debuggerClient) {
+    debuggerClient.on('break', function() {
+      debuggerClient.fetchObjectId(
+        debuggerClient,
+        'inspectedObject',
+        function(id) {
+          test(debuggerClient, id);
+        }
+      );
+    });
+
     childProcess.stdin.write('go!\n');
   });
 }
@@ -57,7 +77,24 @@ process.on('exit', function() {
   stopAllDebuggers();
 });
 
+function injectTestHelpers(debuggerClient) {
+  debuggerClient.fetchObjectId =
+    function(debuggerClient, expression, callback) {
+      this.request(
+        'evaluate',
+        {
+          expression: expression
+        },
+        function(err, response) {
+          if (err) throw err;
+          callback(String(response.handle));
+        }
+      );
+    };
+}
+
 exports.startDebugger = startDebugger;
 exports.runOnBreakInFunction = runOnBreakInFunction;
 exports.stopAllDebuggers = stopAllDebuggers;
 exports.stopAllDebuggersAfterEachTest = stopAllDebugersAfterEachTest;
+exports.runInspectObject = runInspectObject;
