@@ -7,6 +7,8 @@ var fs = require('fs'),
 
 var TEMP_FILE = path.join(__dirname, 'fixtures', 'temp.js');
 var TEMP_DIR = path.join(__dirname, 'work');
+// directory that does not look like a part of a node.js application
+var NON_APP_DIR = path.join(__dirname, '..', 'front-end', 'cm');
 
 beforeEach(deleteTemps);
 describe('ScriptFileStorage', function() {
@@ -78,14 +80,66 @@ describe('ScriptFileStorage', function() {
     );
 
     storage.findAllApplicationScripts(
+      NON_APP_DIR,
       path.join(TEMP_DIR, 'bin', 'app.js'),
       function(err, files) {
         if (err) throw err;
-        expect(files).to.have.members(expectedFiles);
+        expect(files.map(relativeToTemp))
+          .to.have.members(expectedFiles.map(relativeToTemp));
         done();
       }
     );
   });
+
+  it('finds also files in start directory', function(done) {
+    var expectedFiles = givenTempFiles(
+      // Globally installed module, e.g. mocha
+      'global/',
+      'global/runner.js',
+      'global/lib/', 'global/lib/module.js',
+      // Local application we are developing
+      'local/',
+      'local/app.js',
+      'local/test/', 'local/test/app.js',
+      // Other files in a place close to globally installed modules
+      'unrelated/',
+      'unrelated/file.js'
+    );
+
+    // remove unrelated/file.js
+    expect(expectedFiles.pop()).to.match(/unrelated[\/\\]file.js$/);
+
+    storage.findAllApplicationScripts(
+      path.join(TEMP_DIR, 'local'),
+      path.join(TEMP_DIR, 'global', 'runner.js'),
+      function(err, files) {
+        if (err) throw err;
+        expect(files.map(relativeToTemp))
+          .to.have.members(expectedFiles.map(relativeToTemp));
+        done();
+      }
+    );
+  });
+
+  it('removes duplicate entries from files found', function(done) {
+    var expectedFiles = givenTempFiles('app.js', 'node_modules/');
+
+    storage.findAllApplicationScripts(
+      TEMP_DIR,
+      path.join(TEMP_DIR, 'app.js'),
+      function(err, files) {
+        if (err) throw err;
+        expect(files.map(relativeToTemp))
+          .to.have.members(expectedFiles.map(relativeToTemp));
+        expect(files).to.have.length(expectedFiles.length);
+        done();
+      }
+    );
+  });
+
+  function relativeToTemp(p) {
+    return path.relative(TEMP_DIR, p);
+  }
 
   function expectRootToEqualTempDir(done, err, root) {
     if (err) throw err;
@@ -117,7 +171,7 @@ describe('ScriptFileStorage', function() {
     var files = [];
     fs.mkdirSync(TEMP_DIR);
     Array.prototype.forEach.call(arguments, function(f) {
-      f = path.join(TEMP_DIR, f);
+      f = path.join(TEMP_DIR, globPathToNative(f));
       if (isDir(f)) {
         fs.mkdirSync(f);
       } else {
@@ -128,6 +182,10 @@ describe('ScriptFileStorage', function() {
     return files;
   }
 });
+
+function globPathToNative(p) {
+  return p.split('/').join(path.sep);
+}
 
 function getScriptSourceByName(debuggerClient, scriptName, callback) {
   debuggerClient.request(
@@ -145,7 +203,7 @@ function getScriptSourceByName(debuggerClient, scriptName, callback) {
 }
 
 function isDir(path) {
-  return path.match(/\/$/);
+  return path.match(/[\/\\]$/);
 }
 
 function deleteTemps() {
@@ -164,7 +222,9 @@ function deleteTemps() {
     );
 
     entries = entries
-      .map(function(f) { return path.join(TEMP_DIR, f); })
+      .map(function(f) {
+        return path.join(TEMP_DIR, globPathToNative(f));
+      })
       .sort()
       .reverse();
 
